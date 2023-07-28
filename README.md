@@ -1,2 +1,3 @@
-# release-shortener
-A small go server that will redirect requests to the latest github release of a project.
+# url-shortener
+
+A small Go server that will redirect requests to the latest Github release.
