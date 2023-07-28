@@ -40,7 +40,7 @@ func main() {
 	listen := flag.String("listen", ":443", "Listen address")
 	project := flag.String("project", "", "GitHub project path (eg. gpu-ninja/koopt)")
 	domain := flag.String("domain", "", "Public domain")
-	letsEnceyptEmail := flag.String("email", "", "Email address for Let's Encrypt")
+	email := flag.String("email", "", "Email address for Let's Encrypt")
 
 	flag.Parse()
 
@@ -66,7 +66,7 @@ func main() {
 		logger.Fatal("Public hostname is required")
 	}
 
-	if *letsEnceyptEmail == "" {
+	if *email == "" {
 		logger.Fatal("Let's Encrypt email address is required")
 	}
 
@@ -97,11 +97,23 @@ func main() {
 		Prompt:     autocert.AcceptTOS,
 		Cache:      autocert.DirCache("/var/www/.cache"),
 		HostPolicy: autocert.HostWhitelist(*domain),
-		Email:      *letsEnceyptEmail,
+		Email:      *email,
+	}
+
+	{
+		e := echo.New()
+		e.Pre(middleware.HTTPSRedirect())
+
+		// Serve the ACME challenge over HTTP.
+		go func() {
+			if err := http.ListenAndServe(":80", autoTLSManager.HTTPHandler(e)); err != nil {
+				logger.Fatal("Failed to start ACME server", zap.Error(err))
+			}
+		}()
 	}
 
 	s := http.Server{
-		Addr:    ":443",
+		Addr:    *listen,
 		Handler: e,
 		TLSConfig: &tls.Config{
 			ServerName:     *domain,
