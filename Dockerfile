@@ -10,6 +10,9 @@ RUN CGO_ENABLED=0 make
 
 FROM debian:bookworm-slim
 
+RUN apt update \
+  && apt install -y ca-certificates
+
 COPY LICENSE /usr/local/share/url-shortener/
 COPY --from=builder /app/bin/url-shortener /usr/local/bin/
 
