@@ -34,7 +34,7 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", ":8443", "Listen address")
+	listen := flag.String("listen", ":443", "Listen address")
 	project := flag.String("project", "", "GitHub project path (eg. gpu-ninja/koopt)")
 	domain := flag.String("domain", "", "Public domain")
 	letsEnceyptEmail := flag.String("email", "", "Email address for Let's Encrypt")
@@ -90,7 +90,7 @@ func main() {
 		return c.Redirect(http.StatusFound, redirectURL)
 	})
 
-	logger.Info("Starting server", zap.String("port", ":443"))
+	logger.Info("Starting server", zap.String("listen", *listen))
 
 	if err := e.StartAutoTLS(*listen); err != nil {
 		logger.Fatal("Failed to start server", zap.Error(err))

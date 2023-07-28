@@ -13,5 +13,6 @@ FROM debian:bookworm-slim
 COPY LICENSE /usr/local/share/url-shortener/
 COPY --from=builder /app/bin/url-shortener /usr/local/bin/
 
-EXPOSE 8080
+EXPOSE 80/tcp
+EXPOSE 443/tcp
 ENTRYPOINT ["/usr/local/bin/url-shortener"]
