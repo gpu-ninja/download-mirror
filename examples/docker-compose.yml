@@ -1,0 +1,26 @@
+version: "3.16"
+
+services:
+  url-shortener:
+    image: ghcr.io/gpu-ninja/url-shortener:latest
+    command:
+      - --project=gpu-ninja/koopt
+      - --domain=koopt.sh
+      - --email=damian@pecke.tt
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - autotls-cache:/var/www/.cache
+    restart: always
+
+  loopy-dns:
+    image: ghcr.io/gpu-ninja/loopy-dns:latest
+    command:
+      - --zone=local.koopt.sh.
+    ports:
+      - "53:5353/udp"
+    restart: always
+
+volumes:
+  autotls-cache:
