@@ -37,7 +37,6 @@ import (
 )
 
 func main() {
-	listen := flag.String("listen", ":443", "Listen address")
 	project := flag.String("project", "", "GitHub project path (eg. gpu-ninja/koopt)")
 	domain := flag.String("domain", "", "Public domain")
 	email := flag.String("email", "", "Email address for Let's Encrypt")
@@ -72,7 +71,6 @@ func main() {
 
 	e := echo.New()
 	e.Use(middleware.Recover())
-	e.Use(middleware.Logger())
 
 	e.GET("/latest/:assetPath", func(c echo.Context) error {
 		assetPath := c.Param("assetPath")
@@ -91,8 +89,6 @@ func main() {
 		return c.Redirect(http.StatusFound, redirectURL)
 	})
 
-	logger.Info("Starting server", zap.String("listen", *listen))
-
 	autoTLSManager := autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
 		Cache:      autocert.DirCache("/var/www/.cache"),
@@ -102,18 +98,19 @@ func main() {
 
 	{
 		e := echo.New()
+		e.Use(middleware.Recover())
 		e.Pre(middleware.HTTPSRedirect())
 
 		// Serve the ACME challenge over HTTP.
 		go func() {
-			if err := http.ListenAndServe(":80", autoTLSManager.HTTPHandler(e)); err != nil {
+			if err := http.ListenAndServe(":8080", autoTLSManager.HTTPHandler(e)); err != nil {
 				logger.Fatal("Failed to start ACME server", zap.Error(err))
 			}
 		}()
 	}
 
 	s := http.Server{
-		Addr:    *listen,
+		Addr:    ":8443",
 		Handler: e,
 		TLSConfig: &tls.Config{
 			ServerName:     *domain,
@@ -121,6 +118,8 @@ func main() {
 			NextProtos:     []string{acme.ALPNProto},
 		},
 	}
+
+	logger.Info("Listening for connections", zap.String("domain", *domain))
 
 	if err := s.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
 		logger.Fatal("Failed to start server", zap.Error(err))
