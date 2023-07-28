@@ -36,7 +36,7 @@ import (
 func main() {
 	listen := flag.String("listen", ":8443", "Listen address")
 	project := flag.String("project", "", "GitHub project path (eg. gpu-ninja/koopt)")
-	publicHost := flag.String("host", "", "Public hostname")
+	domain := flag.String("domain", "", "Public domain")
 	letsEnceyptEmail := flag.String("email", "", "Email address for Let's Encrypt")
 
 	flag.Parse()
@@ -59,7 +59,7 @@ func main() {
 		logger.Fatal("Github project path is required")
 	}
 
-	if *publicHost == "" {
+	if *domain == "" {
 		logger.Fatal("Public hostname is required")
 	}
 
@@ -68,7 +68,7 @@ func main() {
 	}
 
 	e := echo.New()
-	e.AutoTLSManager.HostPolicy = autocert.HostWhitelist(*publicHost)
+	e.AutoTLSManager.HostPolicy = autocert.HostWhitelist(*domain)
 	e.AutoTLSManager.Email = *letsEnceyptEmail
 	e.AutoTLSManager.Prompt = autocert.AcceptTOS
 	e.AutoTLSManager.Cache = autocert.DirCache("/var/www/.cache")
