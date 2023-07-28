@@ -30,13 +30,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
 	listen := flag.String("listen", ":8443", "Listen address")
 	project := flag.String("project", "", "GitHub project path (eg. gpu-ninja/koopt)")
-	certificatePath := flag.String("certificate", "cert.pem", "Path to the TLS certificate")
-	keyPath := flag.String("key", "key.pem", "Path to the TLS key")
+	publicHost := flag.String("host", "", "Public hostname")
+	letsEnceyptEmail := flag.String("email", "", "Email address for Let's Encrypt")
 
 	flag.Parse()
 
@@ -58,7 +59,19 @@ func main() {
 		logger.Fatal("Github project path is required")
 	}
 
+	if *publicHost == "" {
+		logger.Fatal("Public hostname is required")
+	}
+
+	if *letsEnceyptEmail == "" {
+		logger.Fatal("Let's Encrypt email address is required")
+	}
+
 	e := echo.New()
+	e.AutoTLSManager.HostPolicy = autocert.HostWhitelist(*publicHost)
+	e.AutoTLSManager.Email = *letsEnceyptEmail
+	e.AutoTLSManager.Prompt = autocert.AcceptTOS
+	e.AutoTLSManager.Cache = autocert.DirCache("/var/www/.cache")
 
 	e.GET("/latest/:assetPath", func(c echo.Context) error {
 		assetPath := c.Param("assetPath")
@@ -78,7 +91,8 @@ func main() {
 	})
 
 	logger.Info("Starting server", zap.String("port", ":443"))
-	if err := e.StartTLS(*listen, *certificatePath, *keyPath); err != nil {
+
+	if err := e.StartAutoTLS(*listen); err != nil {
 		logger.Fatal("Failed to start server", zap.Error(err))
 	}
 }
