@@ -18,6 +18,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/http"
@@ -28,8 +29,10 @@ import (
 
 	zaplogfmt "github.com/jsternberg/zap-logfmt"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -68,10 +71,8 @@ func main() {
 	}
 
 	e := echo.New()
-	e.AutoTLSManager.HostPolicy = autocert.HostWhitelist(*domain)
-	e.AutoTLSManager.Email = *letsEnceyptEmail
-	e.AutoTLSManager.Prompt = autocert.AcceptTOS
-	e.AutoTLSManager.Cache = autocert.DirCache("/var/www/.cache")
+	e.Use(middleware.Recover())
+	e.Use(middleware.Logger())
 
 	e.GET("/latest/:assetPath", func(c echo.Context) error {
 		assetPath := c.Param("assetPath")
@@ -92,7 +93,24 @@ func main() {
 
 	logger.Info("Starting server", zap.String("listen", *listen))
 
-	if err := e.StartAutoTLS(*listen); err != nil {
+	autoTLSManager := autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		Cache:      autocert.DirCache("/var/www/.cache"),
+		HostPolicy: autocert.HostWhitelist(*domain),
+		Email:      *letsEnceyptEmail,
+	}
+
+	s := http.Server{
+		Addr:    ":443",
+		Handler: e,
+		TLSConfig: &tls.Config{
+			ServerName:     *domain,
+			GetCertificate: autoTLSManager.GetCertificate,
+			NextProtos:     []string{acme.ALPNProto},
+		},
+	}
+
+	if err := s.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
 		logger.Fatal("Failed to start server", zap.Error(err))
 	}
 }
