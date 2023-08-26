@@ -4,7 +4,7 @@ services:
   download-mirror:
     image: ghcr.io/gpu-ninja/download-mirror:latest
     environment:
-      - DOMAIN=koopt.sh
+      - DOMAIN=download.koopt.sh
       - EMAIL=damian@pecke.tt
       - TOKEN_FILE=/run/secrets/upload_token
       - CACHE=/var/www/.blobs

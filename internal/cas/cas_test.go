@@ -45,7 +45,7 @@ func TestContentAddressableStorage(t *testing.T) {
 		dir: t.TempDir(),
 	}
 
-	s, err := cas.NewStorage(logger, "https://example.com/content", t.TempDir(), ups)
+	s, err := cas.NewStorage(logger, "https://example.com/blob", t.TempDir(), ups)
 	require.NoError(t, err)
 
 	data := make([]byte, 1000000)
