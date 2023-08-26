@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/adrg/xdg"
 	"github.com/gpu-ninja/download-mirror/internal/cas"
@@ -113,7 +114,8 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("failed to read token file: %w", err)
 				}
-				token = string(data)
+
+				token = strings.TrimSpace(string(data))
 			}
 
 			if token == "" {
@@ -127,7 +129,7 @@ func main() {
 					return fmt.Errorf("failed to read WebDAV password file: %w", err)
 				}
 
-				webdavPassword = string(data)
+				webdavPassword = strings.TrimSpace(string(data))
 			}
 
 			if webdavPassword == "" {

@@ -3,10 +3,10 @@ version: "3.16"
 services:
   download-mirror:
     image: ghcr.io/gpu-ninja/download-mirror:latest
-    env:
+    environment:
       - DOMAIN=koopt.sh
       - EMAIL=damian@pecke.tt
-      - TOKEN_FILE=/run/secrets/token
+      - TOKEN_FILE=/run/secrets/upload_token
       - CACHE=/var/www/.blobs
       - WEBDAV_URI=https://<username>.your-storagebox.de
       - WEBDAV_USER=<username>
