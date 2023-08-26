@@ -142,9 +142,9 @@ func main() {
 				return fmt.Errorf("failed to create WebDAV upstream: %w", err)
 			}
 
-			baseURL := fmt.Sprintf("https://%s/blob", cCtx.String("domain"))
+			baseURL := fmt.Sprintf("https://%s/blobs", cCtx.String("domain"))
 			if cCtx.Bool("dev") {
-				baseURL = "http://localhost:8080/blob"
+				baseURL = "http://localhost:8080/blobs"
 			}
 
 			storage, err := cas.NewStorage(logger, baseURL, cCtx.String("cache"), ups)
@@ -155,7 +155,7 @@ func main() {
 			e := echo.New()
 			e.Use(middleware.Recover())
 
-			e.GET("/blob/:id", storage.Get)
+			e.GET("/blobs/:id", storage.Get)
 			e.POST("/blob", storage.Put, validBearerToken(token))
 
 			if cCtx.Bool("dev") {

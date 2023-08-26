@@ -45,7 +45,7 @@ func TestContentAddressableStorage(t *testing.T) {
 		dir: t.TempDir(),
 	}
 
-	s, err := cas.NewStorage(logger, "https://example.com/blob", t.TempDir(), ups)
+	s, err := cas.NewStorage(logger, "https://example.com/blobs", t.TempDir(), ups)
 	require.NoError(t, err)
 
 	data := make([]byte, 1000000)
@@ -79,6 +79,23 @@ func TestContentAddressableStorage(t *testing.T) {
 	rec = httptest.NewRecorder()
 
 	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strings.Split(blobURL, "/")[4])
+
+	err = s.Get(c)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, data, rec.Body.Bytes())
+
+	// New empty cache directory.
+	s, err = cas.NewStorage(logger, "https://example.com/blobs", t.TempDir(), ups)
+	require.NoError(t, err)
+
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	rec = httptest.NewRecorder()
+
+	c = e.NewContext(req, rec)
 	c.SetParamNames("id")
 	c.SetParamValues(strings.Split(blobURL, "/")[4])
 

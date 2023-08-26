@@ -18,6 +18,8 @@
 package cas
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +31,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/rogpeppe/go-internal/cache"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // Storage is a cached content addressable storage handler.
@@ -70,63 +73,111 @@ func (s *Storage) Get(c echo.Context) error {
 	}
 
 	file, _, err := s.localCache.GetFile(cache.ActionID(id))
+	if err != nil && !strings.Contains(err.Error(), "not found") {
+		s.logger.Error("Failed to get file from cache",
+			zap.String("id", encodedID), zap.Error(err))
+
+		return echo.NewHTTPError(http.StatusInternalServerError)
+	} else if err == nil {
+		s.logger.Info("Blob found in local cache", zap.String("id", encodedID))
+
+		return c.File(file)
+	}
+
+	s.logger.Info("Blob not found in local cache", zap.String("id", encodedID))
+
+	r, err := s.ups.Get(cache.ActionID(id))
 	if err != nil {
-		if !strings.Contains(err.Error(), "not found") {
-			s.logger.Error("Failed to get file from cache",
-				zap.String("id", encodedID), zap.Error(err))
+		s.logger.Error("Failed to download blob from upstream", zap.Error(err))
 
-			return echo.NewHTTPError(http.StatusInternalServerError)
-		}
+		return echo.NewHTTPError(http.StatusInternalServerError)
+	}
+	defer r.Close()
 
-		s.logger.Info("Blob not found in local cache", zap.String("id", encodedID))
+	f, err := os.CreateTemp("", "blob-")
+	if err != nil {
+		s.logger.Error("Failed to create temporary blob file", zap.Error(err))
 
-		r, err := s.ups.Get(cache.ActionID(id))
-		if err != nil {
-			s.logger.Error("Failed to download blob from upstream", zap.Error(err))
+		return echo.NewHTTPError(http.StatusInternalServerError)
+	}
+	defer func() {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+	}()
 
-			return echo.NewHTTPError(http.StatusInternalServerError)
-		}
-		defer r.Close()
+	dataAvailableCh := make(chan struct{}, 1)
 
-		f, err := os.CreateTemp("", "cas-")
-		if err != nil {
-			s.logger.Error("Failed to create temporary blob file", zap.Error(err))
+	g, ctx := errgroup.WithContext(c.Request().Context())
 
-			return echo.NewHTTPError(http.StatusInternalServerError)
-		}
-		defer func() {
-			_ = f.Close()
-			_ = os.Remove(f.Name())
-		}()
+	g.Go(func() error {
+		defer close(dataAvailableCh)
 
-		if err = c.Stream(http.StatusOK, echo.MIMEOctetStream, io.TeeReader(r, f)); err != nil {
-			return err
-		}
+		if _, err = copyContext(ctx, io.MultiWriter(f, writerFunc(func(p []byte) (int, error) {
+			dataAvailableCh <- struct{}{}
 
-		if err := f.Sync(); err != nil {
-			s.logger.Error("Failed to sync temporary blob file", zap.Error(err))
-
-			return echo.NewHTTPError(http.StatusInternalServerError)
-		}
-
-		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			s.logger.Error("Failed to rewind temporary blob file", zap.Error(err))
-
-			return echo.NewHTTPError(http.StatusInternalServerError)
-		}
-
-		if _, _, err := s.localCache.Put(cache.ActionID(id), f); err != nil {
-			s.logger.Error("Failed to store blob in cache", zap.Error(err))
-
-			return echo.NewHTTPError(http.StatusInternalServerError)
+			return len(p), nil
+		})), r); err != nil {
+			return fmt.Errorf("failed to read blob from upstream: %w", err)
 		}
 
 		return nil
+	})
+
+	g.Go(func() error {
+		var writtenBytes int64
+		buf := make([]byte, 32*1024)
+
+		for range dataAvailableCh {
+			if writtenBytes == 0 {
+				c.Response().Header().Set(echo.HeaderContentType, echo.MIMEOctetStream)
+				c.Response().WriteHeader(http.StatusOK)
+			}
+
+			pos, err := f.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current position in temporary blob file: %w", err)
+			}
+
+			chunkSize := pos - writtenBytes
+			if chunkSize > int64(len(buf)) {
+				chunkSize = int64(len(buf))
+			}
+
+			nr, err := f.ReadAt(buf[:chunkSize], writtenBytes)
+			if err != nil && !errors.Is(err, io.EOF) {
+				return fmt.Errorf("failed to read from temporary blob file: %w", err)
+			}
+
+			nw, err := c.Response().Write(buf[:nr])
+			if err != nil || nw != nr {
+				return fmt.Errorf("failed to write to client: %w", err)
+			}
+
+			writtenBytes += int64(nw)
+		}
+
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		s.logger.Error("Encountered error transferring blob", zap.Error(err))
+
+		return echo.NewHTTPError(http.StatusInternalServerError)
 	}
 
-	s.logger.Info("Blob found in local cache", zap.String("id", encodedID))
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		s.logger.Error("Failed to rewind temporary blob file", zap.Error(err))
 
-	return c.File(file)
+		return echo.NewHTTPError(http.StatusInternalServerError)
+	}
+
+	if _, _, err := s.localCache.Put(cache.ActionID(id), f); err != nil {
+		s.logger.Error("Failed to store blob in cache", zap.Error(err))
+
+		return echo.NewHTTPError(http.StatusInternalServerError)
+	}
+
+	return nil
 }
 
 func (s *Storage) Put(c echo.Context) error {
@@ -145,7 +196,7 @@ func (s *Storage) Put(c echo.Context) error {
 	}
 	defer r.Close()
 
-	f, err := os.CreateTemp("", "cas-")
+	f, err := os.CreateTemp("", "blob-")
 	if err != nil {
 		s.logger.Error("Failed to create temporary blob file", zap.Error(err))
 
@@ -157,7 +208,7 @@ func (s *Storage) Put(c echo.Context) error {
 	}()
 
 	h := cache.NewHash("")
-	if _, err := io.Copy(f, io.TeeReader(r, h)); err != nil {
+	if _, err := copyContext(c.Request().Context(), f, io.TeeReader(r, h)); err != nil {
 		s.logger.Warn("Failed to get blob from client", zap.Error(err))
 
 		return echo.NewHTTPError(http.StatusInternalServerError)
@@ -209,4 +260,27 @@ func (s *Storage) Put(c echo.Context) error {
 	}
 
 	return c.String(http.StatusCreated, s.baseURL+"/"+encodedID)
+}
+
+func copyContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {
+	return io.Copy(dst, readerFunc(func(p []byte) (int, error) {
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		default:
+			return src.Read(p)
+		}
+	}))
+}
+
+type readerFunc func(p []byte) (n int, err error)
+
+func (f readerFunc) Read(p []byte) (n int, err error) {
+	return f(p)
+}
+
+type writerFunc func(p []byte) (n int, err error)
+
+func (f writerFunc) Write(p []byte) (n int, err error) {
+	return f(p)
 }
