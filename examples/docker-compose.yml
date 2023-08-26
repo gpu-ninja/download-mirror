@@ -10,7 +10,7 @@ services:
       - CACHE=/var/www/.blobs
       - WEBDAV_URI=https://<username>.your-storagebox.de
       - WEBDAV_USER=<username>
-      - WEBDAV_PASSWORD=<password>
+      - WEBDAV_PASSWORD_FILE=/run/secrets/webdav_password
     ports:
       - "80:8080"
       - "443:8443"
@@ -19,6 +19,7 @@ services:
       - blob-cache:/var/www/.blobs
     secrets:
       - upload_token
+      - webdav_password
     restart: always
 
   loopy-dns:
@@ -36,3 +37,5 @@ volumes:
 secrets:
   upload_token:
     file: upload_token.txt
+  webdav_password:
+    file: webdav_password.txt

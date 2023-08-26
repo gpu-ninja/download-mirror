@@ -96,10 +96,14 @@ func main() {
 				Required: true,
 			},
 			&cli.StringFlag{
-				Name:     "webdav-password",
-				Usage:    "Password for WebDAV upstream",
-				EnvVars:  []string{"WEBDAV_PASSWORD"},
-				Required: true,
+				Name:    "webdav-password",
+				Usage:   "Password for WebDAV upstream",
+				EnvVars: []string{"WEBDAV_PASSWORD"},
+			},
+			&cli.StringFlag{
+				Name:    "webdav-password-file",
+				Usage:   "File containing password for WebDAV upstream",
+				EnvVars: []string{"WEBDAV_PASSWORD_FILE"},
 			},
 		},
 		Action: func(cCtx *cli.Context) error {
@@ -116,8 +120,22 @@ func main() {
 				return fmt.Errorf("authentication token is required")
 			}
 
+			webdavPassword := cCtx.String("webdav-password")
+			if cCtx.IsSet("webdav-password-file") {
+				data, err := os.ReadFile(cCtx.String("webdav-password-file"))
+				if err != nil {
+					return fmt.Errorf("failed to read WebDAV password file: %w", err)
+				}
+
+				webdavPassword = string(data)
+			}
+
+			if webdavPassword == "" {
+				return fmt.Errorf("WebDAV password is required")
+			}
+
 			ups, err := upstream.NewWebDAV(cCtx.String("webdav-uri"),
-				cCtx.String("webdav-user"), cCtx.String("webdav-password"))
+				cCtx.String("webdav-user"), webdavPassword)
 			if err != nil {
 				return fmt.Errorf("failed to create WebDAV upstream: %w", err)
 			}
