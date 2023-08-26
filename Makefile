@@ -1,8 +1,8 @@
 SRCS := $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
-bin/url-shortener: $(SRCS)
+bin/download-mirror: $(SRCS)
 	@mkdir -p bin
-	go build -o $@ cmd/url-shortener/main.go
+	go build -o $@ cmd/download-mirror/main.go
 
 tidy:
 	go mod tidy

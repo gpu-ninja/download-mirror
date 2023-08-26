@@ -1,17 +1,24 @@
 version: "3.16"
 
 services:
-  url-shortener:
-    image: ghcr.io/gpu-ninja/url-shortener:latest
-    command:
-      - --project=gpu-ninja/koopt
-      - --domain=koopt.sh
-      - --email=damian@pecke.tt
+  download-mirror:
+    image: ghcr.io/gpu-ninja/download-mirror:latest
+    env:
+      - DOMAIN=koopt.sh
+      - EMAIL=damian@pecke.tt
+      - TOKEN_FILE=/run/secrets/token
+      - CACHE=/var/www/.blobs
+      - WEBDAV_URI=https://<username>.your-storagebox.de
+      - WEBDAV_USER=<username>
+      - WEBDAV_PASSWORD=<password>
     ports:
       - "80:8080"
       - "443:8443"
     volumes:
       - autotls-cache:/var/www/.cache
+      - blob-cache:/var/www/.blobs
+    secrets:
+      - upload_token
     restart: always
 
   loopy-dns:
@@ -24,3 +31,8 @@ services:
 
 volumes:
   autotls-cache:
+  blob-cache:
+
+secrets:
+  upload_token:
+    file: upload_token.txt
