@@ -194,6 +194,9 @@ func main() {
 
 			e := echo.New()
 			e.Use(middleware.Recover())
+			e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+				Format: "method=${method}, uri=${uri}, status=${status}\n",
+			}))
 
 			e.GET("/blobs/:id/:name", storage.Get)
 			e.POST("/blob", storage.Put, validBearerToken(token))
