@@ -8,6 +8,7 @@ services:
       - EMAIL=damian@pecke.tt
       - TOKEN_FILE=/run/secrets/upload_token
       - CACHE=/var/www/.blobs
+      - HASH_SECRET_FILE=/run/secrets/hash_secret
       - WEBDAV_URI=https://<username>.your-storagebox.de
       - WEBDAV_USER=<username>
       - WEBDAV_PASSWORD_FILE=/run/secrets/webdav_password
@@ -20,6 +21,7 @@ services:
     secrets:
       - upload_token
       - webdav_password
+      - hash_secret
     restart: always
 
   loopy-dns:
@@ -39,3 +41,5 @@ secrets:
     file: upload_token.txt
   webdav_password:
     file: webdav_password.txt
+  hash_secret:
+    file: hash_secret.txt
