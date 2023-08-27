@@ -195,7 +195,7 @@ func main() {
 			e := echo.New()
 			e.Use(middleware.Recover())
 
-			e.GET("/blobs/:id", storage.Get)
+			e.GET("/blobs/:id/:name", storage.Get)
 			e.POST("/blob", storage.Put, validBearerToken(token))
 
 			if cCtx.Bool("dev") {

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -52,7 +53,7 @@ func NewStorage(ctx context.Context, logger *zap.Logger, cacheDir string, cacheM
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
-	localCache, err := cache.Open(cacheDir, hashBuilder, nil)
+	localCache, err := cache.Open(logger, cacheDir, hashBuilder, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open cache: %w", err)
 	}
@@ -209,6 +210,9 @@ func (s *Storage) Put(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest)
 	}
 
+	s.logger.Info("Received request to store blob",
+		zap.String("name", body.Filename))
+
 	r, err := body.Open()
 	if err != nil {
 		s.logger.Warn("Failed to open form file", zap.Error(err))
@@ -255,7 +259,8 @@ func (s *Storage) Put(c echo.Context) error {
 
 	encodedID := base58.Encode(id[:])
 
-	s.logger.Info("Received blob", zap.String("id", encodedID))
+	s.logger.Info("Received blob", zap.String("name", body.Filename),
+		zap.String("id", encodedID))
 
 	file, _, err := s.localCache.GetFile(id)
 	if err != nil {
@@ -278,7 +283,7 @@ func (s *Storage) Put(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError)
 	}
 
-	return c.String(http.StatusCreated, s.baseURL+"/"+encodedID)
+	return c.String(http.StatusCreated, fmt.Sprintf("%s/%s/%s", s.baseURL, encodedID, url.PathEscape(body.Filename)))
 }
 
 func copyContext(ctx context.Context, dst io.Writer, src io.Reader) (int64, error) {

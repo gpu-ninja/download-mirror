@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/gpu-ninja/download-mirror/internal/securehash"
+	"go.uber.org/zap"
 )
 
 type ID [securehash.Size]byte
@@ -39,13 +40,14 @@ type Entry struct {
 }
 
 type Cache struct {
+	logger      *zap.Logger
 	dir         string
 	hashBuilder *securehash.Builder
 	now         func() time.Time // For testing.
 }
 
 // Open opens and returns the cache in the given directory.
-func Open(dir string, hashBuilder *securehash.Builder, now func() time.Time) (*Cache, error) {
+func Open(logger *zap.Logger, dir string, hashBuilder *securehash.Builder, now func() time.Time) (*Cache, error) {
 	fi, err := os.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -67,6 +69,7 @@ func Open(dir string, hashBuilder *securehash.Builder, now func() time.Time) (*C
 	}
 
 	return &Cache{
+		logger:      logger,
 		dir:         dir,
 		hashBuilder: hashBuilder,
 		now:         now,
@@ -211,10 +214,11 @@ func (c *Cache) Size() (int64, error) {
 
 			entry, err := c.getIndexEntry(id)
 			if err != nil {
-				return err
+				c.logger.Warn("Failed to get index entry",
+					zap.String("id", eid), zap.Error(err))
+			} else {
+				size += entry.Size
 			}
-
-			size += entry.Size
 		}
 
 		return nil
@@ -240,7 +244,8 @@ func (c *Cache) Trim(maxBytes int64) error {
 		for i := 0; i < 256; i++ {
 			subdir := filepath.Join(c.dir, fmt.Sprintf("%02x", i))
 			if err := c.trimSubdir(subdir, cutoff); err != nil {
-				return err
+				c.logger.Warn("Failed to trim subdirectory",
+					zap.String("subdir", subdir), zap.Error(err))
 			}
 		}
 

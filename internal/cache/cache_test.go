@@ -29,9 +29,12 @@ import (
 	"github.com/gpu-ninja/download-mirror/internal/securehash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestCache(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
 	blob := make([]byte, 1000000)
 	_, err := io.ReadFull(rand.Reader, blob)
 	require.NoError(t, err)
@@ -41,7 +44,7 @@ func TestCache(t *testing.T) {
 	hashBuilder := securehash.NewBuilder().
 		WithSecret([]byte("test"))
 
-	c, err := cache.Open(cacheDir, hashBuilder, func() time.Time {
+	c, err := cache.Open(logger, cacheDir, hashBuilder, func() time.Time {
 		return time.Now().Add(-5 * time.Hour)
 	})
 	require.NoError(t, err)
@@ -79,7 +82,7 @@ func TestCache(t *testing.T) {
 	_, _, err = c.GetFile(id)
 	require.NoError(t, err)
 
-	c, err = cache.Open(cacheDir, hashBuilder, nil)
+	c, err = cache.Open(logger, cacheDir, hashBuilder, nil)
 	require.NoError(t, err)
 
 	err = c.Trim(1000)
