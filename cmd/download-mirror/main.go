@@ -25,7 +25,9 @@ import (
 	"strings"
 
 	"github.com/adrg/xdg"
+	"github.com/docker/go-units"
 	"github.com/gpu-ninja/download-mirror/internal/cas"
+	"github.com/gpu-ninja/download-mirror/internal/securehash"
 	"github.com/gpu-ninja/download-mirror/internal/upstream"
 	zaplogfmt "github.com/jsternberg/zap-logfmt"
 	"github.com/labstack/echo/v4"
@@ -85,6 +87,22 @@ func main() {
 				Value:   defaultCacheDir,
 			},
 			&cli.StringFlag{
+				Name:    "cache-size",
+				Usage:   "Maximum size of local cache",
+				EnvVars: []string{"CACHE_SIZE"},
+				Value:   "10G",
+			},
+			&cli.StringFlag{
+				Name:    "hash-secret",
+				Usage:   "Secret for secure hash",
+				EnvVars: []string{"HASH_SECRET"},
+			},
+			&cli.StringFlag{
+				Name:    "hash-secret-file",
+				Usage:   "File containing secret for secure hash",
+				EnvVars: []string{"HASH_SECRET_FILE"},
+			},
+			&cli.StringFlag{
 				Name:     "webdav-uri",
 				Usage:    "URI for WebDAV upstream",
 				EnvVars:  []string{"WEBDAV_URI"},
@@ -136,6 +154,20 @@ func main() {
 				return fmt.Errorf("WebDAV password is required")
 			}
 
+			secureHashSecret := cCtx.String("hash-secret")
+			if cCtx.IsSet("hash-secret-file") {
+				data, err := os.ReadFile(cCtx.String("hash-secret-file"))
+				if err != nil {
+					return fmt.Errorf("failed to read secure hash secret file: %w", err)
+				}
+
+				secureHashSecret = strings.TrimSpace(string(data))
+			}
+
+			if secureHashSecret == "" {
+				return fmt.Errorf("secure hash secret is required")
+			}
+
 			ups, err := upstream.NewWebDAV(cCtx.String("webdav-uri"),
 				cCtx.String("webdav-user"), webdavPassword)
 			if err != nil {
@@ -147,7 +179,15 @@ func main() {
 				baseURL = "http://localhost:8080/blobs"
 			}
 
-			storage, err := cas.NewStorage(logger, baseURL, cCtx.String("cache"), ups)
+			hashBuilder := securehash.NewBuilder().
+				WithSecret([]byte(secureHashSecret))
+
+			cacheMaxBytes, err := units.FromHumanSize(cCtx.String("cache-size"))
+			if err != nil {
+				return fmt.Errorf("unable to parse cache size: %w", err)
+			}
+
+			storage, err := cas.NewStorage(cCtx.Context, logger, cCtx.String("cache"), cacheMaxBytes, hashBuilder, baseURL, ups)
 			if err != nil {
 				return fmt.Errorf("failed to create content addressable storage handler: %w", err)
 			}

@@ -24,14 +24,19 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/akamensky/base58"
+	"github.com/gpu-ninja/download-mirror/internal/cache"
+	"github.com/gpu-ninja/download-mirror/internal/securehash"
 	"github.com/gpu-ninja/download-mirror/internal/upstream"
 	"github.com/labstack/echo/v4"
-	"github.com/rogpeppe/go-internal/cache"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+)
+
+const (
+	cacheTrimInterval = 5 * time.Minute
 )
 
 // Storage is a cached content addressable storage handler.
@@ -42,15 +47,31 @@ type Storage struct {
 	ups        upstream.Upstream
 }
 
-func NewStorage(logger *zap.Logger, baseURL, cacheDir string, ups upstream.Upstream) (*Storage, error) {
+func NewStorage(ctx context.Context, logger *zap.Logger, cacheDir string, cacheMaxBytes int64, hashBuilder *securehash.Builder, baseURL string, ups upstream.Upstream) (*Storage, error) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
-	localCache, err := cache.Open(cacheDir)
+	localCache, err := cache.Open(cacheDir, hashBuilder, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open cache: %w", err)
 	}
+
+	ticker := time.NewTicker(cacheTrimInterval)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				logger.Info("Trimming cache")
+
+				if err := localCache.Trim(cacheMaxBytes); err != nil {
+					logger.Error("Failed to trim cache", zap.Error(err))
+				}
+			}
+		}
+	}()
 
 	return &Storage{
 		logger:     logger,
@@ -66,14 +87,14 @@ func (s *Storage) Get(c echo.Context) error {
 	s.logger.Info("Received request for blob", zap.String("id", encodedID))
 
 	id, err := base58.Decode(encodedID)
-	if err != nil || len(id) != cache.HashSize {
+	if err != nil || len(id) != securehash.Size {
 		s.logger.Warn("Invalid id", zap.String("id", encodedID), zap.Error(err))
 
 		return echo.NewHTTPError(http.StatusBadRequest)
 	}
 
-	file, _, err := s.localCache.GetFile(cache.ActionID(id))
-	if err != nil && !strings.Contains(err.Error(), "not found") {
+	file, _, err := s.localCache.GetFile(cache.ID(id))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		s.logger.Error("Failed to get file from cache",
 			zap.String("id", encodedID), zap.Error(err))
 
@@ -86,7 +107,7 @@ func (s *Storage) Get(c echo.Context) error {
 
 	s.logger.Info("Blob not found in local cache", zap.String("id", encodedID))
 
-	r, err := s.ups.Get(cache.ActionID(id))
+	r, err := s.ups.Get(cache.ID(id))
 	if err != nil {
 		s.logger.Error("Failed to download blob from upstream", zap.Error(err))
 
@@ -171,7 +192,7 @@ func (s *Storage) Get(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError)
 	}
 
-	if _, _, err := s.localCache.Put(cache.ActionID(id), f); err != nil {
+	if _, _, err := s.localCache.Put(f); err != nil {
 		s.logger.Error("Failed to store blob in cache", zap.Error(err))
 
 		return echo.NewHTTPError(http.StatusInternalServerError)
@@ -207,8 +228,7 @@ func (s *Storage) Put(c echo.Context) error {
 		_ = os.Remove(f.Name())
 	}()
 
-	h := cache.NewHash("")
-	if _, err := copyContext(c.Request().Context(), f, io.TeeReader(r, h)); err != nil {
+	if _, err := copyContext(c.Request().Context(), f, r); err != nil {
 		s.logger.Warn("Failed to get blob from client", zap.Error(err))
 
 		return echo.NewHTTPError(http.StatusInternalServerError)
@@ -226,19 +246,18 @@ func (s *Storage) Put(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError)
 	}
 
-	id := h.Sum()
-	encodedID := base58.Encode(id[:])
-
-	s.logger.Info("Received blob", zap.String("id", encodedID))
-
-	_, _, err = s.localCache.Put(cache.ActionID(id), f)
+	id, _, err := s.localCache.Put(f)
 	if err != nil {
 		s.logger.Error("Failed to store blob in cache", zap.Error(err))
 
 		return echo.NewHTTPError(http.StatusInternalServerError)
 	}
 
-	file, _, err := s.localCache.GetFile(cache.ActionID(id))
+	encodedID := base58.Encode(id[:])
+
+	s.logger.Info("Received blob", zap.String("id", encodedID))
+
+	file, _, err := s.localCache.GetFile(id)
 	if err != nil {
 		s.logger.Error("Failed to get blob from cache", zap.Error(err))
 

@@ -5,9 +5,9 @@ go 1.20
 require (
 	github.com/adrg/xdg v0.4.0
 	github.com/akamensky/base58 v0.0.0-20210829145138-ce8bf8802e8f
+	github.com/docker/go-units v0.5.0
 	github.com/jsternberg/zap-logfmt v1.3.0
 	github.com/labstack/echo/v4 v4.11.1
-	github.com/rogpeppe/go-internal v1.11.0
 	github.com/stretchr/testify v1.8.1
 	github.com/studio-b12/gowebdav v0.9.0
 	github.com/urfave/cli/v2 v2.25.7

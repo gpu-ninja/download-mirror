@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0
  *
- * Copyright 2023 Damian Peckett <damian@pecke.tt>.
+ * Copyright 2023 Damian Peckett <damian@peckett>.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,30 @@
  * limitations under the License.
  */
 
-package upstream
+package securehash
 
 import (
-	"io"
-
-	"github.com/gpu-ninja/download-mirror/internal/securehash"
+	"crypto/hmac"
+	"crypto/sha256"
+	"hash"
 )
 
-// Upstream is an interface for upstream storage providers.
-type Upstream interface {
-	Get(id [securehash.Size]byte) (io.ReadCloser, error)
-	Put(id [securehash.Size]byte, r io.Reader) error
+const Size = sha256.Size
+
+type Builder struct {
+	Secret []byte
+}
+
+func NewBuilder() *Builder {
+	return &Builder{}
+}
+
+func (b *Builder) WithSecret(secret []byte) *Builder {
+	return &Builder{
+		Secret: secret,
+	}
+}
+
+func (b *Builder) Build() hash.Hash {
+	return hmac.New(sha256.New, []byte(b.Secret))
 }

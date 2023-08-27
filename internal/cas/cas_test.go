@@ -19,6 +19,7 @@ package cas_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"io"
 	"mime/multipart"
@@ -31,21 +32,28 @@ import (
 
 	"github.com/akamensky/base58"
 	"github.com/gpu-ninja/download-mirror/internal/cas"
+	"github.com/gpu-ninja/download-mirror/internal/securehash"
 	"github.com/labstack/echo/v4"
-	"github.com/rogpeppe/go-internal/cache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
 
 func TestContentAddressableStorage(t *testing.T) {
+	ctx := context.Background()
+
 	logger := zaptest.NewLogger(t)
+
+	hashBuilder := securehash.NewBuilder().
+		WithSecret([]byte("test"))
 
 	ups := &fsUpstream{
 		dir: t.TempDir(),
 	}
 
-	s, err := cas.NewStorage(logger, "https://example.com/blobs", t.TempDir(), ups)
+	cacheCtx, cancel := context.WithCancel(ctx)
+
+	s, err := cas.NewStorage(cacheCtx, logger, t.TempDir(), 0, hashBuilder, "https://example.com/blobs", ups)
 	require.NoError(t, err)
 
 	data := make([]byte, 1000000)
@@ -88,8 +96,12 @@ func TestContentAddressableStorage(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, data, rec.Body.Bytes())
 
+	cancel()
+	cacheCtx, cancel = context.WithCancel(ctx)
+	defer cancel()
+
 	// New empty cache directory.
-	s, err = cas.NewStorage(logger, "https://example.com/blobs", t.TempDir(), ups)
+	s, err = cas.NewStorage(cacheCtx, logger, t.TempDir(), 0, hashBuilder, "https://example.com/blobs", ups)
 	require.NoError(t, err)
 
 	req = httptest.NewRequest(http.MethodGet, "/", nil)
@@ -110,11 +122,11 @@ type fsUpstream struct {
 	dir string
 }
 
-func (ups *fsUpstream) Get(id [cache.HashSize]byte) (io.ReadCloser, error) {
+func (ups *fsUpstream) Get(id [securehash.Size]byte) (io.ReadCloser, error) {
 	return os.Open(filepath.Join(ups.dir, base58.Encode(id[:])))
 }
 
-func (ups *fsUpstream) Put(id [cache.HashSize]byte, r io.Reader) error {
+func (ups *fsUpstream) Put(id [securehash.Size]byte, r io.Reader) error {
 	f, err := os.Create(filepath.Join(ups.dir, base58.Encode(id[:])))
 	if err != nil {
 		return err
