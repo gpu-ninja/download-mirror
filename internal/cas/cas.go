@@ -112,6 +112,10 @@ func (s *Storage) Get(c echo.Context) error {
 	if err != nil {
 		s.logger.Error("Failed to download blob from upstream", zap.Error(err))
 
+		if errors.Is(err, upstream.ErrNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound)
+		}
+
 		return echo.NewHTTPError(http.StatusInternalServerError)
 	}
 	defer r.Close()

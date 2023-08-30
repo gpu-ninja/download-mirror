@@ -234,16 +234,15 @@ func (c *Cache) Size() (int64, error) {
 // all entries older than trimLimit. If maxBytes is non-zero, Trim
 // will remove entries until the cache size is less than maxBytes.
 func (c *Cache) Trim(maxBytes int64) error {
+	const maxIterations = 20
+
 	maxAge := trimLimit
 	now := c.now()
 
-	for {
+	for i := 0; i < maxIterations; i++ {
 		c.logger.Info("Trimming cache", zap.Stringer("maxAge", maxAge))
 
-		// Trim each of the 256 subdirectories.
-		// We subtract an additional mtimeInterval
-		// to account for the imprecision of our "last used" mtimes.
-		cutoff := now.Add(-maxAge - mtimeInterval)
+		cutoff := now.Add(-maxAge)
 		for i := 0; i < 256; i++ {
 			subdir := filepath.Join(c.dir, fmt.Sprintf("%02x", i))
 			if err := c.trimSubdir(subdir, cutoff); err != nil {
@@ -271,6 +270,8 @@ func (c *Cache) Trim(maxBytes int64) error {
 			return nil
 		}
 	}
+
+	return fmt.Errorf("exceeded max iterations")
 }
 
 // trimSubdir trims a single cache subdirectory.

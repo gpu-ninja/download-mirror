@@ -18,10 +18,19 @@
 package upstream
 
 import (
+	"errors"
 	"io"
+	"os"
 
 	"github.com/gpu-ninja/download-mirror/internal/securehash"
 )
+
+// ErrNotFound is returned when a file is not found.
+var ErrNotFound = &os.PathError{
+	Op:   "Get",
+	Path: "not found",
+	Err:  errors.New("not found"),
+}
 
 // Upstream is an interface for upstream storage providers.
 type Upstream interface {
