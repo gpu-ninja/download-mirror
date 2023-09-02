@@ -53,7 +53,8 @@ func main() {
 	}
 
 	app := &cli.App{
-		Name: "download-mirror",
+		Name:  "download-mirror",
+		Usage: "CDN frontend for Hetzner Storage Boxes.",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:    "dev",
