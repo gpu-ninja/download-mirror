@@ -6,13 +6,13 @@ docker-all:
   BUILD --platform=linux/amd64 --platform=linux/arm64 +docker
 
 docker:
-  ARG TARGETPLATFORM
+  ARG TARGETARCH
   ARG VERSION
   FROM debian:bookworm-slim
   RUN apt update \
     && apt install -y ca-certificates
   COPY LICENSE /usr/local/share/download-mirror/
-  COPY +download-mirror/download-mirror /usr/local/bin/
+  COPY (+download-mirror/download-mirror --GOARCH=${TARGETARCH}) /usr/local/bin/
   EXPOSE 8080/tcp
   EXPOSE 8443/tcp
   ENTRYPOINT ["/usr/local/bin/download-mirror"]
