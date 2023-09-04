@@ -115,7 +115,7 @@ func (s *Storage) Get(c echo.Context) error {
 
 	s.logger.Info("Blob not found in local cache", zap.String("id", encodedID))
 
-	r, err := s.ups.Get(id)
+	r, contentLength, err := s.ups.Get(id)
 	if err != nil {
 		s.logger.Error("Failed to download blob from upstream", zap.Error(err))
 
@@ -163,6 +163,7 @@ func (s *Storage) Get(c echo.Context) error {
 		for range dataAvailableCh {
 			if writtenBytes == 0 {
 				c.Response().Header().Set(echo.HeaderContentType, echo.MIMEOctetStream)
+				c.Response().Header().Set(echo.HeaderContentLength, fmt.Sprintf("%d", contentLength))
 				c.Response().WriteHeader(http.StatusOK)
 			}
 

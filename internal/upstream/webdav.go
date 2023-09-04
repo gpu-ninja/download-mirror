@@ -40,13 +40,26 @@ func NewWebDAV(uri, user, password string) (*WebDAV, error) {
 	}, nil
 }
 
-func (w *WebDAV) Get(id []byte) (io.ReadCloser, error) {
-	r, err := w.client.ReadStream(base58.Encode(id))
-	if err != nil && gowebdav.IsErrNotFound(err) {
-		return nil, ErrNotFound
+func (w *WebDAV) Get(id []byte) (io.ReadCloser, int64, error) {
+	fi, err := w.client.Stat(base58.Encode(id))
+	if err != nil {
+		if gowebdav.IsErrNotFound(err) {
+			return nil, 0, ErrNotFound
+		}
+
+		return nil, 0, err
 	}
 
-	return r, err
+	r, err := w.client.ReadStream(base58.Encode(id))
+	if err != nil {
+		if gowebdav.IsErrNotFound(err) {
+			return nil, 0, ErrNotFound
+		}
+
+		return nil, 0, err
+	}
+
+	return r, fi.Size(), nil
 }
 
 func (w *WebDAV) Put(id []byte, r io.Reader) error {

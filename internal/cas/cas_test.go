@@ -32,6 +32,7 @@ import (
 
 	"github.com/akamensky/base58"
 	"github.com/gpu-ninja/download-mirror/internal/cas"
+	"github.com/gpu-ninja/download-mirror/internal/upstream"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,8 +121,22 @@ type fsUpstream struct {
 	dir string
 }
 
-func (ups *fsUpstream) Get(id []byte) (io.ReadCloser, error) {
-	return os.Open(filepath.Join(ups.dir, base58.Encode(id[:])))
+func (ups *fsUpstream) Get(id []byte) (io.ReadCloser, int64, error) {
+	fi, err := os.Stat(filepath.Join(ups.dir, base58.Encode(id[:])))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, 0, upstream.ErrNotFound
+		}
+
+		return nil, 0, err
+	}
+
+	f, err := os.Open(filepath.Join(ups.dir, base58.Encode(id[:])))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return f, fi.Size(), nil
 }
 
 func (ups *fsUpstream) Put(id []byte, r io.Reader) error {

@@ -32,6 +32,6 @@ var ErrNotFound = &os.PathError{
 
 // Upstream is an interface for upstream storage providers.
 type Upstream interface {
-	Get(id []byte) (io.ReadCloser, error)
+	Get(id []byte) (io.ReadCloser, int64, error)
 	Put(id []byte, r io.Reader) error
 }
