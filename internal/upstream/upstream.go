@@ -21,8 +21,6 @@ import (
 	"errors"
 	"io"
 	"os"
-
-	"github.com/gpu-ninja/download-mirror/internal/securehash"
 )
 
 // ErrNotFound is returned when a file is not found.
@@ -34,6 +32,6 @@ var ErrNotFound = &os.PathError{
 
 // Upstream is an interface for upstream storage providers.
 type Upstream interface {
-	Get(id [securehash.Size]byte) (io.ReadCloser, error)
-	Put(id [securehash.Size]byte, r io.Reader) error
+	Get(id []byte) (io.ReadCloser, error)
+	Put(id []byte, r io.Reader) error
 }

@@ -22,7 +22,6 @@ import (
 	"io"
 
 	"github.com/akamensky/base58"
-	"github.com/gpu-ninja/download-mirror/internal/securehash"
 	"github.com/studio-b12/gowebdav"
 )
 
@@ -41,8 +40,8 @@ func NewWebDAV(uri, user, password string) (*WebDAV, error) {
 	}, nil
 }
 
-func (w *WebDAV) Get(id [securehash.Size]byte) (io.ReadCloser, error) {
-	r, err := w.client.ReadStream(base58.Encode(id[:]))
+func (w *WebDAV) Get(id []byte) (io.ReadCloser, error) {
+	r, err := w.client.ReadStream(base58.Encode(id))
 	if err != nil && gowebdav.IsErrNotFound(err) {
 		return nil, ErrNotFound
 	}
@@ -50,6 +49,6 @@ func (w *WebDAV) Get(id [securehash.Size]byte) (io.ReadCloser, error) {
 	return r, err
 }
 
-func (w *WebDAV) Put(id [securehash.Size]byte, r io.Reader) error {
-	return w.client.WriteStream(base58.Encode(id[:]), r, 0o644)
+func (w *WebDAV) Put(id []byte, r io.Reader) error {
+	return w.client.WriteStream(base58.Encode(id), r, 0o644)
 }

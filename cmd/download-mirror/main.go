@@ -27,7 +27,6 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/docker/go-units"
 	"github.com/gpu-ninja/download-mirror/internal/cas"
-	"github.com/gpu-ninja/download-mirror/internal/securehash"
 	"github.com/gpu-ninja/download-mirror/internal/upstream"
 	zaplogfmt "github.com/jsternberg/zap-logfmt"
 	"github.com/labstack/echo/v4"
@@ -180,15 +179,12 @@ func main() {
 				baseURL = "http://localhost:8080/blobs"
 			}
 
-			hashBuilder := securehash.NewBuilder().
-				WithSecret([]byte(secureHashSecret))
-
 			cacheMaxBytes, err := units.FromHumanSize(cCtx.String("cache-size"))
 			if err != nil {
 				return fmt.Errorf("unable to parse cache size: %w", err)
 			}
 
-			storage, err := cas.NewStorage(cCtx.Context, logger, cCtx.String("cache"), cacheMaxBytes, hashBuilder, baseURL, ups)
+			storage, err := cas.NewStorage(cCtx.Context, logger, cCtx.String("cache"), cacheMaxBytes, []byte(secureHashSecret), baseURL, ups)
 			if err != nil {
 				return fmt.Errorf("failed to create content addressable storage handler: %w", err)
 			}

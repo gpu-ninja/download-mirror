@@ -25,20 +25,6 @@ import (
 
 const Size = sha256.Size
 
-type Builder struct {
-	Secret []byte
-}
-
-func NewBuilder() *Builder {
-	return &Builder{}
-}
-
-func (b *Builder) WithSecret(secret []byte) *Builder {
-	return &Builder{
-		Secret: secret,
-	}
-}
-
-func (b *Builder) Build() hash.Hash {
-	return hmac.New(sha256.New, []byte(b.Secret))
+func New(secureHashSecret []byte) hash.Hash {
+	return hmac.New(sha256.New, secureHashSecret)
 }

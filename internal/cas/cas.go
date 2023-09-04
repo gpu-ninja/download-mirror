@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"net/http"
 	"net/url"
@@ -28,7 +29,7 @@ import (
 	"time"
 
 	"github.com/akamensky/base58"
-	"github.com/gpu-ninja/download-mirror/internal/cache"
+	"github.com/gpu-ninja/blobcache"
 	"github.com/gpu-ninja/download-mirror/internal/securehash"
 	"github.com/gpu-ninja/download-mirror/internal/upstream"
 	"github.com/labstack/echo/v4"
@@ -44,16 +45,18 @@ const (
 type Storage struct {
 	logger     *zap.Logger
 	baseURL    string
-	localCache *cache.Cache
+	localCache *blobcache.Cache
 	ups        upstream.Upstream
 }
 
-func NewStorage(ctx context.Context, logger *zap.Logger, cacheDir string, cacheMaxBytes int64, hashBuilder *securehash.Builder, baseURL string, ups upstream.Upstream) (*Storage, error) {
+func NewStorage(ctx context.Context, logger *zap.Logger, cacheDir string, cacheMaxBytes int64, secureHashSecret []byte, baseURL string, ups upstream.Upstream) (*Storage, error) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
-	localCache, err := cache.Open(logger, cacheDir, hashBuilder, nil)
+	localCache, err := blobcache.NewCache(logger, cacheDir, func() hash.Hash {
+		return securehash.New(secureHashSecret)
+	}, securehash.Size, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open cache: %w", err)
 	}
@@ -94,21 +97,25 @@ func (s *Storage) Get(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest)
 	}
 
-	file, _, err := s.localCache.GetFile(cache.ID(id))
+	cacheReader, entry, err := s.localCache.Get(id)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		s.logger.Error("Failed to get file from cache",
 			zap.String("id", encodedID), zap.Error(err))
 
 		return echo.NewHTTPError(http.StatusInternalServerError)
 	} else if err == nil {
+		defer cacheReader.Close()
+
 		s.logger.Info("Blob found in local cache", zap.String("id", encodedID))
 
-		return c.File(file)
+		c.Response().Header().Set(echo.HeaderContentLength, fmt.Sprintf("%d", entry.Size))
+
+		return c.Stream(http.StatusOK, echo.MIMEOctetStream, cacheReader)
 	}
 
 	s.logger.Info("Blob not found in local cache", zap.String("id", encodedID))
 
-	r, err := s.ups.Get(cache.ID(id))
+	r, err := s.ups.Get(id)
 	if err != nil {
 		s.logger.Error("Failed to download blob from upstream", zap.Error(err))
 
@@ -266,22 +273,15 @@ func (s *Storage) Put(c echo.Context) error {
 	s.logger.Info("Received blob", zap.String("name", body.Filename),
 		zap.String("id", encodedID))
 
-	file, _, err := s.localCache.GetFile(id)
+	cacheReader, _, err := s.localCache.Get(id)
 	if err != nil {
 		s.logger.Error("Failed to get blob from cache", zap.Error(err))
 
 		return echo.NewHTTPError(http.StatusInternalServerError)
 	}
+	defer cacheReader.Close()
 
-	r, err = os.Open(file)
-	if err != nil {
-		s.logger.Error("Failed to open cached blob file", zap.Error(err))
-
-		return echo.NewHTTPError(http.StatusInternalServerError)
-	}
-	defer r.Close()
-
-	if err := s.ups.Put(id, r); err != nil {
+	if err := s.ups.Put(id, cacheReader); err != nil {
 		s.logger.Error("Failed to upload blob to upstream", zap.Error(err))
 
 		return echo.NewHTTPError(http.StatusInternalServerError)
